@@ -7,6 +7,7 @@ earthengine-api>=0.1.350
 pandas>=2.0.0
 geopandas>=0.14.0
 python-dotenv
+geemap>=0.36.6
 
 [dev]
 uv
