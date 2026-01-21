@@ -2,9 +2,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.search.fetch_CDSE import DEFAULT_BBOX, cdse
+from src.search.fetch_CDSE import DEFAULT_BBOX
+from src.search.fetch_CDSE import main as cdse
 
 # --- 測試資料準備 ---
+
 
 @pytest.fixture
 def mock_events():
@@ -27,9 +29,9 @@ def mock_events():
 def test_cdse_logic_and_defaults(mock_mkdir, mock_save, mock_stac, mock_events):
     # 模擬 STAC 搜尋回傳空結果，我們只測進入 process_event_for_cdse 之前的參數
     mock_stac.return_value.search.return_value.item_collection.return_value = []
-
+    mock_save.return_value = "/mock/path/file.tif"
     # 執行任務
-    cdse(mock_events, collection="sentinel-2-l2a", bands=["B04"])
+    cdse(mock_events, collection="sentinel-2-l2a", bands=["B04"], base_dir="/mock/data")
 
     # 驗證 1：日期計算是否正確 (2024-01-10 減 5 天 = 2024-01-05)
     # 取得搜尋時傳入的參數
@@ -67,7 +69,12 @@ def test_sentinel_1_multi_band_call(mock_save, mock_stac, mock_events):
     mock_save.return_value = "/mock/path/file.tif"
 
     # 執行測試：指定雷達衛星與 VV, VH 兩個波段
-    cdse(mock_events, collection="sentinel-1-grd", bands=["vv", "vh"])
+    cdse(
+        mock_events,
+        collection="sentinel-1-grd",
+        bands=["vv", "vh"],
+        base_dir="./output_images/mock",
+    )
 
     # 驗證：save_as_cog 應該被呼叫兩次 (一次 VV, 一次 VH)
     assert mock_save.call_count == 2

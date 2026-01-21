@@ -1,5 +1,5 @@
 # run_real_test.py
-from src.search.fetch_CDSE import cdse
+from src.search.fetch_CDSE import main
 
 # 設定測試事件 (針對確定有圖的 2024-12-05)
 # run_real_test.py
@@ -16,12 +16,12 @@ test_events = [
 ]
 
 config = {
-    "collection": "sentinel-2-l2a",  # 換成雷達 Collection
-    "bands": ["B04_10m", "TCI_10m"],  # 雷達常見的雙極化波段
+    "collection": "sentinel-2-l2a",  # 可以自行調整CDSE產品
+    "bands": ["B04_10m", "TCI_10m"],  # 可自行調整波段
     "base_dir": "data/radar_test",
 }
 
 if __name__ == "__main__":
-    print("🚀 啟動最終下載測試...")
-    # 確保參數名稱符合 cdse(event_list, collection, bands, base_dir) 的定義
-    cdse(test_events, **config)
+    print("啟動最終下載測試...")
+    # 確保參數名稱符合 main(event_list, collection, bands, base_dir) 的定義
+    main(test_events, **config)

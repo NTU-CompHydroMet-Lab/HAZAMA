@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 import boto3
 
-#import pandas as pd
+# import pandas as pd
 import rasterio
 from dotenv import load_dotenv
 from pystac_client import Client
@@ -13,7 +13,6 @@ from rasterio.vrt import WarpedVRT
 from rasterio.warp import transform_bounds
 from rasterio.windows import from_bounds
 
-# --- 設定 ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("CDSE_Fetcher")
 
@@ -32,8 +31,8 @@ def save_as_cog(item, bbox_wgs84, event_id, output_dir, band):
     asset = item.assets.get(band)
     if not asset:
         available_assets = list(item.assets.keys())
-        logger.warning(f"影像 {item.id} 找不到波段 {band}")
-        logger.info(f"該影像可用的波段有: {available_assets}")
+        logger.warning(f"Image {item.id} can't find band {band}")
+        logger.info(f"The available bands of this product: {available_assets}")
         return None
 
     s3_url = asset.href.replace(
@@ -56,31 +55,30 @@ def save_as_cog(item, bbox_wgs84, event_id, output_dir, band):
             GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
         ):
             with rasterio.open(s3_url) as src:
-                # --- 關鍵修正：針對 S1 使用 WarpedVRT ---
-                # 這會將影像在讀取時即時投影到 WGS84
                 with WarpedVRT(src, dst_crs="EPSG:4326") as vrt:
                     target_crs = vrt.crs
                     try:
-                        # 1. 取得影像本身的邊界 (WGS84)
+                        # 取得影像邊界 (WGS84)
                         t_left, t_bottom, t_right, t_top = transform_bounds(
                             "EPSG:4326", target_crs, *bbox_wgs84
                         )
                         img_left, img_bottom, img_right, img_top = vrt.bounds
 
-                        # 2. 計算交集範圍 (Intersection)
-                        # 只取兩者重疊的部分
+                        # 計算交集範圍
                         inter_left = max(img_left, t_left)
                         inter_bottom = max(img_bottom, t_bottom)
                         inter_right = min(img_right, t_right)
                         inter_top = min(img_top, t_top)
-                        logger.info(f"🔍 影像範圍: {vrt.bounds}")
-                        logger.info(f"🔍 目標範圍: {bbox_wgs84}")
-                        # 3. 檢查是否有實質交集
+                        logger.info(f"Bound of image: {vrt.bounds}")
+                        logger.info(f"Bound of target: {bbox_wgs84}")
+                        # 檢查是否有實質交集
                         if inter_left >= inter_right or inter_bottom >= inter_top:
-                            logger.warning(f"影像 {item.id} 與目標區域無重疊")
+                            logger.warning(
+                                f"Image {item.id} does not overlap with target bbox."
+                            )
                             return None
 
-                        # 4. 使用交集範圍計算 window
+                        # 使用交集範圍計算window
                         window = from_bounds(
                             inter_left,
                             inter_bottom,
@@ -92,12 +90,12 @@ def save_as_cog(item, bbox_wgs84, event_id, output_dir, band):
                         # 再次安全檢查
                         if window.width < 1 or window.height < 1:
                             logger.error(
-                            f"計算出的視窗無效 (w={window.width},h={window.height})"
+                                f"Invalid window (w={window.width},h={window.height})"
                             )
                             return None
 
                         logger.info(
-                        f"正在下載裁切區域: {int(window.width)}x{int(window.height)}"
+                            f"Download {int(window.width)}x{int(window.height)}"
                         )
                         data = vrt.read(window=window)
 
@@ -121,19 +119,18 @@ def save_as_cog(item, bbox_wgs84, event_id, output_dir, band):
                             dst.write(data)
 
                     except Exception as e:
-                        logger.error(f"{band} 裁切失敗: {e}")
+                        logger.error(f"{band} Fail: {e}")
                         return None
 
         return os.path.abspath(local_path)
     except Exception as e:
-        logger.error(f"讀取 S1 失敗: {e}")
+        logger.error(f"Fail to download image: {e}")
         return None
 
 
 def process_event_for_cdse(
     event_id, bbox, date_range, collection, bands, base_output_dir
 ):
-    base_output_dir = "data/output_images"
     event_folder = os.path.join(base_output_dir, event_id)
     if not os.path.exists(event_folder):
         os.makedirs(event_folder)
@@ -157,7 +154,9 @@ def process_event_for_cdse(
         items = list(search.items())
 
         if not items:
-            logger.warning(f"[NO_DATA_FOUND] {event_id} 在 {date_range} 沒圖")
+            logger.warning(
+                f"[NO_DATA_FOUND] {event_id} in {date_range} does not have data."
+            )
             results["status"] = "NO_IMAGE"
             return results
 
@@ -190,21 +189,21 @@ def process_event_for_cdse(
             results["status"] = "NO_IMAGE"
 
     except Exception as e:
-        logger.error(f"處理事件 {event_id} 報錯: {e}")
+        logger.error(f"Processing {event_id} error: {e}")
         results["status"] = "API_ERROR"
 
     return results
 
 
-def cdse(
+def main(
     event_list,
-    collection="sentinel-2-l2a",
+    collection=None,
     bands=None,
-    base_dir="data/output_images",
+    base_dir=None,
 ):
     all_results = []
     for event in event_list:
-        # 時間計算邏輯
+        # 時間計算邏輯 預計在ingestion.py先處理好
         start_dt = datetime.strptime(event["start_date"], "%Y-%m-%d")
         end_dt = datetime.strptime(event["end_date"], "%Y-%m-%d")
         full_start = start_dt - timedelta(days=int(event["pre_event_days"]))
@@ -227,6 +226,28 @@ def cdse(
         )
     output_path = "data/results.csv"
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    #df = pd.DataFrame(all_results)
-    #df.to_csv(output_path, index=False)
-    logger.info("CSV 已更新！")
+    # df = pd.DataFrame(all_results)
+    # df.to_csv(output_path, index=False)
+    logger.info("CSV had been updated！")
+
+
+if __name__ == "__main__":
+    # Example usage
+    test_events = [
+        {
+            "id": "S2_TEST",
+            "start_date": "2024-12-05",
+            "end_date": "2024-12-10",
+            "pre_event_days": 5,
+            "post_event_days": 5,
+            "bbox": [121.56, 25.03, 121.57, 25.04],
+        }
+    ]
+
+    config = {
+        "collection": "sentinel-2-l2a",
+        "bands": ["B04_10m", "TCI_10m"],
+        "base_dir": "data/sentinel_test",
+    }
+
+    main(test_events, **config)
