@@ -128,7 +128,7 @@ def get_bbox_from_gee(row):
     if target_feature is None:
         # print(f"event_id: {event_id} cannot be located")
         return {
-            'bbox': None,
+            'bbox': [[0, 0], [0, 0], [0, 0], [0, 0]],
             'match_method': 'cannot_be_located'
         }
 
@@ -145,7 +145,7 @@ def get_bbox_from_gee(row):
     except Exception as e:
         # If an internal GEE geometry error occurs, also mark as failure
         return {
-            'bbox': None,
+            'bbox': [[0, 0], [0, 0], [0, 0], [0, 0]],
             'match_method': f'error_{str(e)}'
         }
     
