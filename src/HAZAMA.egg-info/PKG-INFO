@@ -16,6 +16,7 @@ Requires-Dist: pandas>=2.0.0
 Requires-Dist: geopandas>=0.14.0
 Requires-Dist: python-dotenv
 Requires-Dist: geemap>=0.36.6
+Requires-Dist: tqdm>=4.67.1
 Provides-Extra: dev
 Requires-Dist: uv; extra == "dev"
 Requires-Dist: ruff>=0.1.0; extra == "dev"
