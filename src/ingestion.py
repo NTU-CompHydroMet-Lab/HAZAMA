@@ -3,27 +3,27 @@ import ee
 import json
 import numpy as np
 from tqdm import tqdm
+import sys
 
 
 # ----------------------------------------------
-# Input data
-# Please modify the path to your local EMDAT flood events CSV file
+# Filepath settings
+# Google Earth Engine project name setting
 input_filepath = '/home/NAS/homes/ycchen-10014/data/flood_events/flood_events_2020-2025.csv'
-emdat_data = pd.read_csv(input_filepath)
-emdat_derived = emdat_data[['DisNo.', 'ISO', 'Country', 'Location', 'Latitude', 'Longitude', 'Start Year', 'Start Month', 'Start Day', 'End Year', 'End Month', 'End Day', 'Admin Units']]
+output_filepath = '/home/chunen/HAZAMA/HAZAMA/outputs/data_ingestion.csv'
+MY_GEE_PROJECT = 'oceanic-hash-467505-r2'
 
 
 # ----------------------------------------------
-# Fields: 'start_date', 'end_date', 'event_id'
-emdat_derived['start_date'] = pd.to_datetime(emdat_derived[['Start Year', 'Start Month', 'Start Day']].rename(
-    columns={'Start Year': 'year', 'Start Month': 'month', 'Start Day': 'day'}
-))
-
-emdat_derived['end_date'] = pd.to_datetime(emdat_derived[['End Year', 'End Month', 'End Day']].rename(
-    columns={'End Year': 'year', 'End Month': 'month', 'End Day': 'day'}
-))
-
-emdat_derived['event_id'] = emdat_derived['DisNo.'].astype(str)
+# Access GAUL dataset in GEE
+def initialize_gee():
+    try:
+        ee.Initialize(project=MY_GEE_PROJECT)
+        print("Earth Engine initialized successfully.")
+    except Exception as e:
+        print("you need to authenticate GEE:")
+        ee.Authenticate()  # Need to authenticate only once
+        ee.Initialize(project=MY_GEE_PROJECT)
 
 
 # ----------------------------------------------
@@ -36,31 +36,45 @@ def parse_admin_units_safe(x):
     except json.JSONDecodeError:
         return []
 
-# Convert 'Admin Units' from string to Python List
-emdat_derived['admin_list'] = emdat_derived['Admin Units'].apply(parse_admin_units_safe)
-# Explode the admin_list to have one row per admin unit
-emdat_exploded = emdat_derived.explode('admin_list').reset_index(drop=True)
-# Expand the dictionaries in admin_list into separate columns (for easier processing)
-admin_details = pd.json_normalize(emdat_exploded['admin_list'])
-emdat_final = pd.concat([emdat_exploded, admin_details], axis=1)
-
 
 # ----------------------------------------------
-# Access GAUL dataset in GEE
-try:
-    ee.Initialize()
-except Exception as e:
-    print("you need to authenticate GEE:")
-    ee.Authenticate()  # Need to authenticate only once
-    ee.Initialize()
+# Fields: 'start_date', 'end_date', 'event_id'
+# Convert 'Admin Units' from string to Python List
+# Processing the data
+def preprocess_data(filepath):
+    print(f"Reading data from {filepath}...")
+    emdat_data = pd.read_csv(filepath)
+    
+    # ----------------------------------------------
+    emdat_derived = emdat_data[['DisNo.', 'ISO', 'Country', 'Location', 'Latitude', 'Longitude', 'Start Year', 'Start Month', 'Start Day', 'End Year', 'End Month', 'End Day', 'Admin Units']].copy()
 
-gaul = ee.FeatureCollection('FAO/GAUL/2015/level2')
+    # ----------------------------------------------
+    emdat_derived['start_date'] = pd.to_datetime(emdat_derived[['Start Year', 'Start Month', 'Start Day']].rename(
+        columns={'Start Year': 'year', 'Start Month': 'month', 'Start Day': 'day'}
+    ))
+
+    emdat_derived['end_date'] = pd.to_datetime(emdat_derived[['End Year', 'End Month', 'End Day']].rename(
+        columns={'End Year': 'year', 'End Month': 'month', 'End Day': 'day'}
+    ))
+
+    emdat_derived['event_id'] = emdat_derived['DisNo.'].astype(str)
+
+    # ----------------------------------------------
+    print("Parsing and exploding Admin Units...")
+    emdat_derived['admin_list'] = emdat_derived['Admin Units'].apply(parse_admin_units_safe)
+    # Explode the admin_list to have one row per admin unit
+    emdat_exploded = emdat_derived.explode('admin_list').reset_index(drop=True)
+    # Expand the dictionaries in admin_list into separate columns (for easier processing)
+    admin_details = pd.json_normalize(emdat_exploded['admin_list'])
+    emdat_final = pd.concat([emdat_exploded, admin_details], axis=1)
+    
+    return emdat_final
 
 
 # ----------------------------------------------
 # Field: 'bbox'
 # Define a function to get bounding box from GEE
-def get_bbox_from_gee(row):
+def get_bbox_from_gee(row, gaul_dataset):
     
     country = row['Country']
 
@@ -84,7 +98,7 @@ def get_bbox_from_gee(row):
     if adm2_code is not None:
         try:
             code_int = int(adm2_code)
-            filtered = gaul.filter(ee.Filter.eq('ADM2_CODE', code_int))
+            filtered = gaul_dataset.filter(ee.Filter.eq('ADM2_CODE', code_int))
             
             if filtered.size().getInfo() > 0:
                 target_feature = filtered.first()
@@ -94,7 +108,7 @@ def get_bbox_from_gee(row):
 
     # --- 2. If no adm2_code, use adm2_name + adm1_name + Country ---
     if target_feature is None and adm2_name is not None and adm1_name is not None:
-        filtered = gaul.filter(ee.Filter.and_(
+        filtered = gaul_dataset.filter(ee.Filter.and_(
             ee.Filter.eq('ADM0_NAME', country),
             ee.Filter.eq('ADM2_NAME', adm2_name),
             ee.Filter.eq('ADM1_NAME', adm1_name)
@@ -106,7 +120,7 @@ def get_bbox_from_gee(row):
 
     # --- 3. If no match above, use adm2_name + Country ---
     if target_feature is None and adm2_name is not None:
-        filtered = gaul.filter(ee.Filter.and_(
+        filtered = gaul_dataset.filter(ee.Filter.and_(
             ee.Filter.eq('ADM0_NAME', country),
             ee.Filter.eq('ADM2_NAME', adm2_name)
         ))
@@ -118,7 +132,7 @@ def get_bbox_from_gee(row):
     # --- 4. If no match by name, and coordinates are available, use coordinates lookup ---
     if target_feature is None and has_coords:
         point = ee.Geometry.Point([lon, lat])
-        filtered = gaul.filterBounds(point)
+        filtered = gaul_dataset.filterBounds(point)
         
         if filtered.size().getInfo() > 0:
             target_feature = filtered.first()
@@ -151,31 +165,47 @@ def get_bbox_from_gee(row):
     
 
 # ----------------------------------------------
-# Process the DataFrame with progress bar
-tqdm.pandas()
+# Main function
+def main():
+    # A. Initialize GEE
+    initialize_gee()
+    # Read GAUL dataset
+    gaul = ee.FeatureCollection('FAO/GAUL/2015/level2')
 
-df_to_process = emdat_final.iloc[0:10].copy() # for testing, take first 10 rows
-# df_to_process = emdat_final.copy()
+    # B. Read and process data
+    try:
+        df_processed = preprocess_data(input_filepath)
+    except FileNotFoundError:
+        print(f"Error: File not found at {input_filepath}")
+        sys.exit(1)   # Exit the program with an error code
 
-print("Start querying GEE for the Bounding Box (this will take a little time)...")
+    # C. Set the range to execute (test mode or full mode)
+    df_to_process = df_processed.iloc[0:10].copy()
+    # df_to_process = df_processed.copy()
 
-# Use apply to perform the query
-# The result will be stored as a dict, which will be unpacked later
-df_to_process['bbox_result'] = df_to_process.progress_apply(get_bbox_from_gee, axis=1)
+    print(f"Start querying GEE for {len(df_to_process)} records...")
+    tqdm.pandas()
 
-# Split the results into separate columns
-bbox_df = pd.json_normalize(df_to_process['bbox_result'])
-final_df = pd.concat([df_to_process.reset_index(drop=True), bbox_df], axis=1)
+    # D. Execute query (use lambda to pass gaul into the function)
+    df_to_process['bbox_result'] = df_to_process.progress_apply(
+        lambda row: get_bbox_from_gee(row, gaul), axis=1
+    )
 
-# Check which locations could not be found
-missing_locations = final_df[final_df['match_method'] == 'cannot_be_located']
-print(f"There are {len(missing_locations)} records that could not be located")
+    # E. Organize results
+    bbox_df = pd.json_normalize(df_to_process['bbox_result'])
+    final_df = pd.concat([df_to_process.reset_index(drop=True), bbox_df], axis=1)
+
+    # Check which locations could not be found
+    missing_count = len(final_df[final_df['match_method'] == 'cannot_be_located'])
+    print(f"There are {missing_count} records that could not be located")
+
+    # F. Output file
+    output = final_df[['event_id', 'start_date', 'end_date', 'bbox']]
+    output.to_csv(output_filepath, index=False)
+    print(f"The Data for ingestion is saved to {output_filepath}")
 
 
 # ----------------------------------------------
-# Output DataFrame with relevant fields
-# Please modify the output path as needed
-output = final_df[['event_id', 'start_date', 'end_date', 'bbox']]
-output_filepath = '/home/chunen/HAZAMA/HAZAMA/outputs/data_ingestion.csv'
-output.to_csv(output_filepath, index=False)
-print(f"The Data for ingestion is saved to {output_filepath}")
+# Run the main function
+if __name__ == "__main__":
+    main()
