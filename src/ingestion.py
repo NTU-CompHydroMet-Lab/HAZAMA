@@ -197,7 +197,7 @@ def main():
 
     # Check which locations could not be found
     missing_count = len(final_df[final_df['match_method'] == 'cannot_be_located'])
-    print(f"There are {missing_count} records that could not be located")
+    print(f"There are **{missing_count}** records that could not be located")
 
     # F. Output file
     output = final_df[['event_id', 'start_date', 'end_date', 'bbox']]
