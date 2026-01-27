@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timedelta
 
 import boto3
+import pandas as pd
 
 # import pandas as pd
 import rasterio
@@ -133,7 +134,7 @@ def process_event_for_cdse(
 
     results = {
         "event_id": event_id,
-        "metadata_files": [],
+        "metadata": [],
         "cloud_coverage": [],
         "path": os.path.abspath(event_folder),
         "status": "PENDING",
@@ -169,7 +170,7 @@ def process_event_for_cdse(
 
             if download_success:
                 success_count += 1
-                results["metadata"].append(item.id)
+                results["metadata"].append(metadata_path)
                 cc = item.properties.get("eo:cloud_cover")
                 if cc is not None:
                     results["cloud_coverage"].append(cc)
@@ -233,8 +234,8 @@ def main(
             )
     output_path = "data/results.csv"
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    # df = pd.DataFrame(all_results)
-    # df.to_csv(output_path, index=False)
+    df = pd.DataFrame(all_results)
+    df.to_csv(output_path, index=False)
     logger.info("CSV had been updated！")
 
 
@@ -242,11 +243,11 @@ if __name__ == "__main__":
     # Example usage
     test_events = [
         {
-            "id": "S2_TEST0",
+            "id": "S2_TEST",
             "start_date": "2024-12-05",
             "end_date": "2024-12-10",
-            "pre_event_days": 1,
-            "post_event_days": 1,
+            "pre_event_days": 3,
+            "post_event_days": 3,
             "bbox": [121.56, 25.03, 121.57, 25.04],
         }
     ]  
