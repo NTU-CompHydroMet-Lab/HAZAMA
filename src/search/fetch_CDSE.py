@@ -13,10 +13,16 @@ from rasterio.vrt import WarpedVRT
 from rasterio.warp import transform_bounds
 from rasterio.windows import from_bounds
 
+load_dotenv()
+
+access_key = os.getenv("CDSE_S3_ACCESS_KEY")
+secret_key = os.getenv("CDSE_S3_SECRET_KEY")
+session = boto3.Session(aws_access_key_id=access_key, aws_secret_access_key=secret_key)
+rio_session = AWSSession(session)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("CDSE_Fetcher")
 
-load_dotenv()
 
 DEFAULT_BBOX = [121.56, 25.03, 121.57, 25.04]  # 台北 101 座標
 
@@ -26,8 +32,6 @@ def get_stac_client():
 
 
 def save_as_cog(item, bbox_wgs84, event_id, output_dir, band):
-    access_key = os.getenv("CDSE_S3_ACCESS_KEY")
-    secret_key = os.getenv("CDSE_S3_SECRET_KEY")
     asset = item.assets.get(band)
     if not asset:
         available_assets = list(item.assets.keys())
@@ -42,85 +46,73 @@ def save_as_cog(item, bbox_wgs84, event_id, output_dir, band):
     unique_filename = f"{event_id}_{date_str}_{band}.tif"
     local_path = os.path.join(output_dir, unique_filename)
     try:
-        session = boto3.Session(
-            aws_access_key_id=access_key, aws_secret_access_key=secret_key
-        )
+        
+        with rasterio.open(s3_url) as src:
+            with WarpedVRT(src, dst_crs="EPSG:4326") as vrt:
+                target_crs = vrt.crs
+                try:
+                    # 取得影像邊界 (WGS84)
+                    t_left, t_bottom, t_right, t_top = transform_bounds(
+                        "EPSG:4326", target_crs, *bbox_wgs84
+                    )
+                    img_left, img_bottom, img_right, img_top = vrt.bounds
 
-        with rasterio.Env(
-            AWSSession(session),
-            AWS_S3_ENDPOINT="eodata.dataspace.copernicus.eu",
-            GDAL_S3_ENDPOINT_DIRECT="eodata.dataspace.copernicus.eu",
-            AWS_VIRTUAL_HOSTING="FALSE",
-            AWS_HTTPS="YES",
-            GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
-        ):
-            with rasterio.open(s3_url) as src:
-                with WarpedVRT(src, dst_crs="EPSG:4326") as vrt:
-                    target_crs = vrt.crs
-                    try:
-                        # 取得影像邊界 (WGS84)
-                        t_left, t_bottom, t_right, t_top = transform_bounds(
-                            "EPSG:4326", target_crs, *bbox_wgs84
+                    # 計算交集範圍
+                    inter_left = max(img_left, t_left)
+                    inter_bottom = max(img_bottom, t_bottom)
+                    inter_right = min(img_right, t_right)
+                    inter_top = min(img_top, t_top)
+                    logger.info(f"Bound of image: {vrt.bounds}")
+                    logger.info(f"Bound of target: {bbox_wgs84}")
+                    # 檢查是否有實質交集
+                    if inter_left >= inter_right or inter_bottom >= inter_top:
+                        logger.warning(
+                            f"Image {item.id} does not overlap with target bbox."
                         )
-                        img_left, img_bottom, img_right, img_top = vrt.bounds
-
-                        # 計算交集範圍
-                        inter_left = max(img_left, t_left)
-                        inter_bottom = max(img_bottom, t_bottom)
-                        inter_right = min(img_right, t_right)
-                        inter_top = min(img_top, t_top)
-                        logger.info(f"Bound of image: {vrt.bounds}")
-                        logger.info(f"Bound of target: {bbox_wgs84}")
-                        # 檢查是否有實質交集
-                        if inter_left >= inter_right or inter_bottom >= inter_top:
-                            logger.warning(
-                                f"Image {item.id} does not overlap with target bbox."
-                            )
-                            return None
-
-                        # 使用交集範圍計算window
-                        window = from_bounds(
-                            inter_left,
-                            inter_bottom,
-                            inter_right,
-                            inter_top,
-                            transform=vrt.transform,
-                        )
-
-                        # 再次安全檢查
-                        if window.width < 1 or window.height < 1:
-                            logger.error(
-                                f"Invalid window (w={window.width},h={window.height})"
-                            )
-                            return None
-
-                        logger.info(
-                            f"Download {int(window.width)}x{int(window.height)}"
-                        )
-                        data = vrt.read(window=window)
-
-                        # 更新 Profile
-                        profile = vrt.profile.copy()
-                        profile.update(
-                            {
-                                "driver": "GTiff",
-                                "height": data.shape[1],
-                                "width": data.shape[2],
-                                "transform": rasterio.windows.transform(
-                                    window, vrt.transform
-                                ),
-                                "tiled": True,
-                                "compress": "deflate",
-                                "crs": "EPSG:4326",
-                            }
-                        )
-
-                        with rasterio.open(local_path, "w", **profile) as dst:
-                            dst.write(data)
-
-                    except Exception as e:
-                        logger.error(f"{band} Fail: {e}")
                         return None
+
+                    # 使用交集範圍計算window
+                    window = from_bounds(
+                        inter_left,
+                        inter_bottom,
+                        inter_right,
+                        inter_top,
+                        transform=vrt.transform,
+                    )
+                    # 再次安全檢查
+                    if window.width < 1 or window.height < 1:
+                        logger.error(
+                            f"Invalid window (w={window.width},h={window.height})"
+                        )
+                        return None
+
+                    logger.info(
+                        f"Download {int(window.width)}x{int(window.height)}"
+                    )
+                    data = vrt.read(window=window)
+
+                    # 更新 Profile
+                    profile = vrt.profile.copy()
+                    profile.update(
+                        {
+                            "driver": "GTiff",
+                            "height": data.shape[1],
+                            "width": data.shape[2],
+                            "transform": rasterio.windows.transform(
+                                window, vrt.transform
+                            ),
+                            "tiled": True,
+                            "compress": "deflate",
+                            "crs": "EPSG:4326",
+                        }
+                    )
+
+                    with rasterio.open(local_path, "w", **profile) as dst:
+                        dst.write(data)
+
+                except Exception as e:
+                    logger.error(f"{band} Fail: {e}")
+                    return None
 
         return os.path.abspath(local_path)
     except Exception as e:
@@ -202,28 +194,36 @@ def main(
     base_dir=None,
 ):
     all_results = []
-    for event in event_list:
-        # 時間計算邏輯 預計在ingestion.py先處理好
-        start_dt = datetime.strptime(event["start_date"], "%Y-%m-%d")
-        end_dt = datetime.strptime(event["end_date"], "%Y-%m-%d")
-        full_start = start_dt - timedelta(days=int(event["pre_event_days"]))
-        full_end = end_dt + timedelta(days=int(event["post_event_days"]))
-        date_range = (
-            f"{full_start.strftime('%Y-%m-%d')}/{full_end.strftime('%Y-%m-%d')}"
-        )
+    with rasterio.Env(
+            AWSSession(session),
+            AWS_S3_ENDPOINT="eodata.dataspace.copernicus.eu",
+            GDAL_S3_ENDPOINT_DIRECT="eodata.dataspace.copernicus.eu",
+            AWS_VIRTUAL_HOSTING="FALSE",
+            AWS_HTTPS="YES",
+            GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
+        ):
+        for event in event_list:
+            # 時間計算邏輯 預計在ingestion.py先處理好
+            start_dt = datetime.strptime(event["start_date"], "%Y-%m-%d")
+            end_dt = datetime.strptime(event["end_date"], "%Y-%m-%d")
+            full_start = start_dt - timedelta(days=int(event["pre_event_days"]))
+            full_end = end_dt + timedelta(days=int(event["post_event_days"]))
+            date_range = (
+                f"{full_start.strftime('%Y-%m-%d')}/{full_end.strftime('%Y-%m-%d')}"
+            )
 
-        res = process_event_for_cdse(
-            event["id"], event.get("bbox"), date_range, collection, bands, base_dir
-        )
+            res = process_event_for_cdse(
+                event["id"], event.get("bbox"), date_range, collection, bands, base_dir
+            )
 
-        # 合併輸出
-        all_results.append(
-            {
-                **res,
-                "pre-event days": event["pre_event_days"],
-                "post-event days": event["post_event_days"],
-            }
-        )
+            # 合併輸出
+            all_results.append(
+                {
+                    **res,
+                    "pre-event days": event["pre_event_days"],
+                    "post-event days": event["post_event_days"],
+                }
+            )
     output_path = "data/results.csv"
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     # df = pd.DataFrame(all_results)
@@ -235,19 +235,18 @@ if __name__ == "__main__":
     # Example usage
     test_events = [
         {
-            "id": "S2_TEST",
+            "id": "S2_TEST1",
             "start_date": "2024-12-05",
             "end_date": "2024-12-10",
             "pre_event_days": 5,
             "post_event_days": 5,
             "bbox": [121.56, 25.03, 121.57, 25.04],
         }
-    ]
-
+    ]  
     config = {
-        "collection": "sentinel-2-l2a",
-        "bands": ["B04_10m", "TCI_10m"],
-        "base_dir": "data/sentinel_test",
+        "collection": "sentinel-2-l2a",  # 可以自行調整CDSE產品
+        "bands": ["B04_10m", "TCI_10m"],  # 可自行調整波段
+        "base_dir": "data/radar_test",
     }
 
     main(test_events, **config)

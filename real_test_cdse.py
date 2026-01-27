@@ -6,7 +6,7 @@ from src.search.fetch_CDSE import main
 
 test_events = [
     {
-        "id": "S2_TEST",
+        "id": "S2_TEST1",
         "start_date": "2024-12-05",
         "end_date": "2024-12-10",
         "pre_event_days": 5,
