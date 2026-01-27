@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from datetime import datetime, timedelta
@@ -124,14 +125,15 @@ def process_event_for_cdse(
     event_id, bbox, date_range, collection, bands, base_output_dir
 ):
     event_folder = os.path.join(base_output_dir, event_id)
-    if not os.path.exists(event_folder):
-        os.makedirs(event_folder)
+    for folder in [event_folder]:
+        if not os.path.exists(folder):
+            os.makedirs(folder)
 
     actual_bbox = bbox if bbox else DEFAULT_BBOX
 
     results = {
         "event_id": event_id,
-        "metadata": [],
+        "metadata_files": [],
         "cloud_coverage": [],
         "path": os.path.abspath(event_folder),
         "status": "PENDING",
@@ -154,6 +156,11 @@ def process_event_for_cdse(
 
         success_count = 0
         for item in items:
+            metadata_path = os.path.join(event_folder, "metadata", f"{item.id}.json")
+            os.makedirs(os.path.dirname(metadata_path), exist_ok=True)
+            with open(metadata_path, "w", encoding="utf-8") as f:
+                json.dump(item.to_dict(), f, indent=4, ensure_ascii=False)
+
             download_success = False
             for band in bands:
                 path = save_as_cog(item, actual_bbox, event_id, event_folder, band)
@@ -235,11 +242,11 @@ if __name__ == "__main__":
     # Example usage
     test_events = [
         {
-            "id": "S2_TEST1",
+            "id": "S2_TEST0",
             "start_date": "2024-12-05",
             "end_date": "2024-12-10",
-            "pre_event_days": 5,
-            "post_event_days": 5,
+            "pre_event_days": 1,
+            "post_event_days": 1,
             "bbox": [121.56, 25.03, 121.57, 25.04],
         }
     ]  
