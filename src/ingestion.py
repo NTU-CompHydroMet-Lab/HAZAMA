@@ -7,16 +7,8 @@ import sys
 
 
 # ----------------------------------------------
-# Filepath settings
-# Google Earth Engine project name setting
-input_filepath = '/home/NAS/homes/ycchen-10014/data/flood_events/flood_events_2020-2025.csv'
-output_filepath = '/home/chunen/HAZAMA/HAZAMA/outputs/data_ingestion.csv'
-MY_GEE_PROJECT = 'oceanic-hash-467505-r2'
-
-
-# ----------------------------------------------
 # Initialize GEE (in order to access GAUL dataset in GEE)
-def initialize_gee():
+def initialize_gee(MY_GEE_PROJECT):
     try:
         ee.Initialize(project=MY_GEE_PROJECT)
         print("Earth Engine initialized successfully.")
@@ -212,9 +204,16 @@ def get_bbox_from_gee(row, gaul_dataset):
 
 # ----------------------------------------------
 # Main function
-def main():
+def main():    
+
+    # Filepath settings
+    # Google Earth Engine project name setting
+    input_filepath = '/home/NAS/homes/ycchen-10014/data/flood_events/flood_events_2020-2025.csv'
+    output_filepath = '/home/chunen/HAZAMA/HAZAMA/outputs/data_ingestion.csv'
+    MY_GEE_PROJECT = 'oceanic-hash-467505-r2'
+    
     # A. Initialize GEE
-    initialize_gee()
+    initialize_gee(MY_GEE_PROJECT)
     # Read GAUL dataset
     gaul = ee.FeatureCollection('FAO/GAUL/2015/level2')
 
