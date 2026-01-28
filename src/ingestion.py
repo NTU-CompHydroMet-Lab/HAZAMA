@@ -15,7 +15,7 @@ MY_GEE_PROJECT = 'oceanic-hash-467505-r2'
 
 
 # ----------------------------------------------
-# Access GAUL dataset in GEE
+# Initialize GEE (in order to access GAUL dataset in GEE)
 def initialize_gee():
     try:
         ee.Initialize(project=MY_GEE_PROJECT)
@@ -35,6 +35,51 @@ def parse_admin_units_safe(x):
         return json.loads(x)
     except json.JSONDecodeError:
         return []
+
+
+# ----------------------------------------------
+# Extract information for adm1 and adm2 from the 'Admin Units' list of a certain event
+def reorganize_admin_data(admin_list):
+    # Check admin_list is valid list, return [{}] if not
+    if not isinstance(admin_list, list) or not admin_list:
+        return [{}]
+    
+    # Collect all ADM1 information (using set to remove duplicates, filter out None/Empty)
+    adm1_names = sorted(list(set([x.get('adm1_name') for x in admin_list if x.get('adm1_name')])))
+    adm1_codes = sorted(list(set([x.get('adm1_code') for x in admin_list if x.get('adm1_code')])))
+    
+    # Collect all ADM2 entries
+    adm2_entries = [x for x in admin_list if x.get('adm2_name') or x.get('adm2_code')]
+    
+    result_rows = []
+    
+    # Case 1: Data has ADM2 (regardless of ADM1)
+    if adm2_entries:
+        for entry in adm2_entries:
+            new_row = {
+                'adm2_name': entry.get('adm2_name'),
+                'adm2_code': entry.get('adm2_code'),
+                # Integrate ADM1 list into each ADM2 entry
+                'adm1_name_list': adm1_names if adm1_names else [],
+                'adm1_code_list': adm1_codes if adm1_codes else []
+            }
+            result_rows.append(new_row)
+            
+    # Case 2: Data has no ADM2 but has ADM1
+    elif adm1_names or adm1_codes:
+        new_row = {
+            'adm2_name': None,
+            'adm2_code': None,
+            'adm1_name_list': adm1_names,
+            'adm1_code_list': adm1_codes
+        }
+        result_rows.append(new_row)
+        
+    # Case 3: Data has neither ADM2 nor ADM1
+    else:
+        result_rows.append({})
+        
+    return result_rows
 
 
 # ----------------------------------------------
@@ -60,13 +105,14 @@ def preprocess_data(filepath):
     emdat_derived['event_id'] = emdat_derived['DisNo.'].astype(str)
 
     # ----------------------------------------------
-    print("Parsing and exploding Admin Units...")
-    emdat_derived['admin_list'] = emdat_derived['Admin Units'].apply(parse_admin_units_safe)
+    print("Parsing and Restructuring Admin Units...")
+    emdat_derived['admin_list_raw'] = emdat_derived['Admin Units'].apply(parse_admin_units_safe)
+    emdat_derived['admin_list_structured'] = emdat_derived['admin_list_raw'].apply(reorganize_admin_data)
     # Explode the admin_list to have one row per admin unit
-    emdat_exploded = emdat_derived.explode('admin_list').reset_index(drop=True)
+    emdat_exploded = emdat_derived.explode('admin_list_structured').reset_index(drop=True)
     # Expand the dictionaries in admin_list into separate columns (for easier processing)
-    admin_details = pd.json_normalize(emdat_exploded['admin_list'])
-    emdat_final = pd.concat([emdat_exploded, admin_details], axis=1)
+    admin_details = pd.json_normalize(emdat_exploded['admin_list_structured'])
+    emdat_final = pd.concat([emdat_exploded.drop(columns=['admin_list_raw', 'admin_list_structured']), admin_details], axis=1)
     
     return emdat_final
 
@@ -80,7 +126,7 @@ def get_bbox_from_gee(row, gaul_dataset):
 
     adm2_code = row['adm2_code'] if pd.notna(row['adm2_code']) else None
     adm2_name = row['adm2_name'] if pd.notna(row['adm2_name']) else None
-    adm1_name = row['adm1_name'] if pd.notna(row['adm1_name']) else None
+    adm1_list = row['adm1_name_list'] if isinstance(row.get('adm1_name_list'), list) and len(row['adm1_name_list']) > 0 else None
     
     try:
         lon = float(row['Longitude'])
@@ -107,11 +153,11 @@ def get_bbox_from_gee(row, gaul_dataset):
             pass
 
     # --- 2. If no adm2_code, use adm2_name + adm1_name + Country ---
-    if target_feature is None and adm2_name is not None and adm1_name is not None:
+    if target_feature is None and adm2_name is not None and adm1_list is not None:
         filtered = gaul_dataset.filter(ee.Filter.and_(
             ee.Filter.eq('ADM0_NAME', country),
             ee.Filter.eq('ADM2_NAME', adm2_name),
-            ee.Filter.eq('ADM1_NAME', adm1_name)
+            ee.Filter.inList('ADM1_NAME', adm1_list)
         ))
         
         if filtered.size().getInfo() > 0:
@@ -180,7 +226,7 @@ def main():
         sys.exit(1)   # Exit the program with an error code
 
     # C. Set the range to execute (test mode or full mode)
-    df_to_process = df_processed.iloc[0:10].copy()
+    df_to_process = df_processed.iloc[0:20].copy()
     # df_to_process = df_processed.copy()
 
     print(f"Start querying GEE for {len(df_to_process)} records...")
