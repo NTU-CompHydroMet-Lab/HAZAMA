@@ -31,7 +31,7 @@ def parse_admin_units_safe(x):
 
 # ----------------------------------------------
 # Extract information for adm1 and adm2 from the 'Admin Units' list of a certain event
-def reorganize_admin_data(admin_list):
+def reorganize_admin_data_gaul(admin_list):
     # Check admin_list is valid list, return [{}] if not
     if not isinstance(admin_list, list) or not admin_list:
         return [{}]
@@ -99,7 +99,7 @@ def preprocess_data(filepath):
     # ----------------------------------------------
     print("Parsing and Restructuring Admin Units...")
     emdat_derived['admin_list_raw'] = emdat_derived['Admin Units'].apply(parse_admin_units_safe)
-    emdat_derived['admin_list_structured'] = emdat_derived['admin_list_raw'].apply(reorganize_admin_data)
+    emdat_derived['admin_list_structured'] = emdat_derived['admin_list_raw'].apply(reorganize_admin_data_gaul)
     # Explode the admin_list to have one row per admin unit
     emdat_exploded = emdat_derived.explode('admin_list_structured').reset_index(drop=True)
     # Expand the dictionaries in admin_list into separate columns (for easier processing)
@@ -208,7 +208,7 @@ def main():
 
     # Filepath settings
     # Google Earth Engine project name setting
-    input_filepath = '/home/NAS/homes/ycchen-10014/data/flood_events/flood_events_2020-2025.csv'
+    input_filepath = '/home/chunen/nas/HAZAMA_data/public_emdat_custom_request_2026-01-28.csv'
     output_filepath = '/home/chunen/HAZAMA/HAZAMA/outputs/data_ingestion.csv'
     MY_GEE_PROJECT = 'oceanic-hash-467505-r2'
     
