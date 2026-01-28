@@ -226,7 +226,7 @@ def main():
         sys.exit(1)   # Exit the program with an error code
 
     # C. Set the range to execute (test mode or full mode)
-    df_to_process = df_processed.iloc[0:20].copy()
+    df_to_process = df_processed.iloc[0:100].copy()
     # df_to_process = df_processed.copy()
 
     print(f"Start querying GEE for {len(df_to_process)} records...")
