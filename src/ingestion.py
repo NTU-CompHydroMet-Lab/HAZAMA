@@ -34,85 +34,89 @@ def parse_admin_units_safe(x):
 # ----------------------------------------------
 # Extract information for adm1 and adm2 from the 'Admin Units', 'GADM Admin Units' list of a certain event
 def reorganize_admin_data(admin_list, admin_list_gadm=None):
-    # Check admin_list is valid list, return [{}] if not
-    if not isinstance(admin_list, list) or not admin_list:
-        return [{}]
-    
-    # Collect all ADM1 information (using set to remove duplicates, filter out None/Empty)
-    adm1_names = sorted(list(set([x.get('adm1_name') for x in admin_list if x.get('adm1_name')])))
-    adm1_codes = sorted(list(set([x.get('adm1_code') for x in admin_list if x.get('adm1_code')])))
-    
-    # Collect all ADM2 entries
-    adm2_entries = [x for x in admin_list if x.get('adm2_name') or x.get('adm2_code')]
+    # Check admin_list (GAUL) is valid list
+    if isinstance(admin_list, list) and admin_list:
+        # Collect all ADM1 information (using set to remove duplicates, filter out None/Empty)
+        adm1_names = sorted(list(set([x.get('adm1_name') for x in admin_list if x.get('adm1_name')])))
+        adm1_codes = sorted(list(set([x.get('adm1_code') for x in admin_list if x.get('adm1_code')])))
+        # Collect all ADM2 entries
+        adm2_entries = [x for x in admin_list if x.get('adm2_name') or x.get('adm2_code')]
+    else:
+        adm1_names, adm1_codes, adm2_entries = [], [], []
 
     # ----------------------------------------------
-    # Check admin_list_gadm is valid list, return [{}] if not
-    if not isinstance(admin_list_gadm, list) or not admin_list_gadm:
-        return [{}]
-    
-    # Collect all ADM1 information (using set to remove duplicates, filter out None/Empty)
-    adm1_names_gadm = sorted(list(set([x.get('name_1') for x in admin_list_gadm if x.get('name_1')])))
-    adm1_codes_gadm = sorted(list(set([x.get('gid_1') for x in admin_list_gadm if x.get('gid_1')])))
-    
-    # Collect all ADM2 entries
-    adm2_entries_gadm = [x for x in admin_list_gadm if x.get('name_2') or x.get('gid_2')]
+    # Check admin_list (GADM) is valid list
+    if isinstance(admin_list_gadm, list) and admin_list_gadm:
+        # Collect all ADM1 information (using set to remove duplicates, filter out None/Empty)
+        adm1_names_gadm = sorted(list(set([x.get('name_1') for x in admin_list_gadm if x.get('name_1')])))
+        adm1_codes_gadm = sorted(list(set([x.get('gid_1') for x in admin_list_gadm if x.get('gid_1')])))
+        # Collect all ADM2 entries
+        adm2_entries_gadm = [x for x in admin_list_gadm if x.get('name_2') or x.get('gid_2')]
+    else:
+        adm1_names_gadm, adm1_codes_gadm, adm2_entries_gadm = [], [], []
     
     # ----------------------------------------------
     result_rows = []
     
+    # Ensure all cases have consistent keys
+    def get_base_row():
+        return {
+            'adm2_name': None, 'adm2_code': None,
+            'adm1_name_list': None, 'adm1_code_list': None,
+            'adm2_name_gadm': None, 'adm2_code_gadm': None,
+            'adm1_name_list_gadm': None, 'adm1_code_list_gadm': None
+        }
+    
     # Case 1: Data has ADM2_GAUL (regardless of ADM1_GAUL)
     if adm2_entries:
         for entry in adm2_entries:
-            new_row = {
+            row = get_base_row()
+            row.update({
                 'adm2_name': entry.get('adm2_name'),
                 'adm2_code': entry.get('adm2_code'),
-                # Integrate ADM1 list into each ADM2 entry
                 'adm1_name_list': adm1_names if adm1_names else [],
                 'adm1_code_list': adm1_codes if adm1_codes else []
-            }
-            result_rows.append(new_row)
+            })
+            result_rows.append(row)
             
     # Case 2: Data has no ADM2_GAUL but has ADM2_GADM (regardless of ADM1)
     elif adm2_entries_gadm:
         for entry in adm2_entries_gadm:
-            new_row = {
+            row = get_base_row()
+            row.update({
                 'adm2_name_gadm': entry.get('name_2'),
                 'adm2_code_gadm': entry.get('gid_2'),
-                # Integrate ADM1 list into each ADM2 entry
-                'adm1_name_list_gadm': adm1_names_gadm if adm1_names_gadm else [],
-                'adm1_code_list_gadm': adm1_codes_gadm if adm1_codes_gadm else [],
+                # Keep both GAUL and GADM ADM1 lists context
                 'adm1_name_list': adm1_names if adm1_names else [],
-                'adm1_code_list': adm1_codes if adm1_codes else []
-            }
-            result_rows.append(new_row)
+                'adm1_code_list': adm1_codes if adm1_codes else [],
+                'adm1_name_list_gadm': adm1_names_gadm if adm1_names_gadm else [],
+                'adm1_code_list_gadm': adm1_codes_gadm if adm1_codes_gadm else []
+            })
+            result_rows.append(row)
     
     # Case 3: Data has no ADM2_GAUL but has ADM1_GAUL (regardless of ADM1_GADM)
     elif adm1_names or adm1_codes:
-        new_row = {
-            'adm2_name': None,
-            'adm2_code': None,
+        row = get_base_row()
+        row.update({
             'adm1_name_list': adm1_names,
             'adm1_code_list': adm1_codes,
             'adm1_name_list_gadm': adm1_names_gadm if adm1_names_gadm else [],
             'adm1_code_list_gadm': adm1_codes_gadm if adm1_codes_gadm else []
-        }
-        result_rows.append(new_row)
+        })
+        result_rows.append(row)
 
     # Case 4: Data has neither ADM2_GAUL nor ADM1_GAUL but has ADM1_GADM
     elif adm1_names_gadm or adm1_codes_gadm:
-        new_row = {
-            'adm2_name': None,
-            'adm2_code': None,
-            'adm1_name_list': None,
-            'adm1_code_list': None,
+        row = get_base_row()
+        row.update({
             'adm1_name_list_gadm': adm1_names_gadm,
             'adm1_code_list_gadm': adm1_codes_gadm
-        }
-        result_rows.append(new_row)
+        })
+        result_rows.append(row)
         
     # Case 5: Data has neither ADM2 nor ADM1
     else:
-        result_rows.append({})
+        result_rows.append(get_base_row())
         
     return result_rows
 
@@ -148,7 +152,7 @@ def preprocess_data(filepath):
     emdat_exploded = emdat_derived.explode('admin_list_structured').reset_index(drop=True)
     # Expand the dictionaries in admin_list into separate columns (for easier processing)
     admin_details = pd.json_normalize(emdat_exploded['admin_list_structured'])
-    emdat_final = pd.concat([emdat_exploded.drop(columns=['admin_list_raw', 'admin_list_structured']), admin_details], axis=1)
+    emdat_final = pd.concat([emdat_exploded.drop(columns=['admin_list_raw', 'admin_list_raw_gadm', 'admin_list_structured']), admin_details], axis=1)
     
     return emdat_final
 
@@ -269,14 +273,31 @@ def get_bbox_from_gee(row, gaul_dataset, gadm_dataset):
 
     # --- Getting the bounding box ---
     try:
-        geom = target_feature.geometry()
-        # bounds: [[minx, miny], [maxx, miny], [maxx, maxy], [minx, maxy], [minx, miny]]
-        bounds = geom.bounds().coordinates().get(0).getInfo()
+        if isinstance(target_feature, (pd.Series, gpd.GeoSeries)):
+            # if target_feature is a GeoPandas GeoSeries (from GADM)
+            geom = target_feature.geometry
+            minx, miny, maxx, maxy = geom.bounds
+            bbox = [
+                [minx, miny], 
+                [maxx, miny], 
+                [maxx, maxy], 
+                [minx, maxy]
+            ]
+            return {
+                'bbox': bbox,
+                'match_method': match_method
+            }
+        else:
+            # if target_feature is an ee.Feature (from GAUL)
+            geom = target_feature.geometry()
+            # bounds: [[minx, miny], [maxx, miny], [maxx, maxy], [minx, maxy], [minx, miny]]
+            bounds = geom.bounds().coordinates().get(0).getInfo()
+            
+            return {
+                'bbox': bounds[0:4],
+                'match_method': match_method
+            }
         
-        return {
-            'bbox': bounds[0:4],
-            'match_method': match_method
-        }
     except Exception as e:
         # If an internal GEE geometry error occurs, also mark as failure
         return {
@@ -334,10 +355,15 @@ def main():
     # Check how many events could not be located
     missing_count = len(final_df[final_df['match_method'] == 'cannot_be_located'])
     print(f"There are **{missing_count}** records that could not be located")
+    # Check how many events had errors
+    error_count = len(final_df[final_df['match_method'].str.startswith('error_')])
+    print(f"There are **{error_count}** records that had errors during processing")
 
     # F. Output file
-    output = final_df[['event_id', 'start_date', 'end_date', 'bbox', 'match_method']]
-    output.to_csv(output_filepath, index=False)
+    output = final_df[['event_id', 'start_date', 'end_date', 'bbox']]
+    # Drop [[0, 0], [0, 0], [0, 0], [0, 0]] entries
+    output_clear = output[output['bbox'].apply(lambda x: x != [[0, 0], [0, 0], [0, 0], [0, 0]])]
+    output_clear.to_csv(output_filepath, index=False)
     print(f"The Data for ingestion is saved to {output_filepath}")
 
 
