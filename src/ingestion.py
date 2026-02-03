@@ -32,11 +32,11 @@ def parse_admin_units_safe(x):
 
 
 # ----------------------------------------------
-# Extract information for adm1 and adm2 from the 'Admin Units', 'GADM Admin Units' list of a certain event
+# Extract information for adm1 and adm2 from the 'Admin Units', 'GADM Admin Units' list
 def reorganize_admin_data(admin_list, admin_list_gadm=None):
     # Check admin_list (GAUL) is valid list
     if isinstance(admin_list, list) and admin_list:
-        # Collect all ADM1 information (using set to remove duplicates, filter out None/Empty)
+        # Collect all ADM1 information (using set to remove duplicates/None/Empty)
         adm1_names = sorted(
             list(set([x.get("adm1_name") for x in admin_list if x.get("adm1_name")]))
         )
@@ -53,7 +53,7 @@ def reorganize_admin_data(admin_list, admin_list_gadm=None):
     # ----------------------------------------------
     # Check admin_list (GADM) is valid list
     if isinstance(admin_list_gadm, list) and admin_list_gadm:
-        # Collect all ADM1 information (using set to remove duplicates, filter out None/Empty)
+        # Collect all ADM1 information (using set to remove duplicates/None/Empty)
         adm1_names_gadm = sorted(
             list(set([x.get("name_1") for x in admin_list_gadm if x.get("name_1")]))
         )
@@ -205,7 +205,7 @@ def preprocess_data(filepath):
     emdat_exploded = emdat_derived.explode("admin_list_structured").reset_index(
         drop=True
     )
-    # Expand the dictionaries in admin_list into separate columns (for easier processing)
+    # Expand the dictionaries in admin_list into separate columns
     admin_details = pd.json_normalize(emdat_exploded["admin_list_structured"])
     emdat_final = pd.concat(
         [
@@ -341,7 +341,7 @@ def get_bbox_from_gee(row, gaul_dataset, gadm_dataset):
             target_feature = matches.iloc[0]
             match_method = "ADM0&2_NAME_GADM"
 
-    # --- 7. If no match by name, and coordinates are available, use coordinates lookup ---
+    # --- 7. If no match by name, and coordinates are available, use coordinates ---
     if target_feature is None and has_coords:
         point = ee.Geometry.Point([lon, lat])
         filtered = gaul_dataset.filterBounds(point)
@@ -369,7 +369,7 @@ def get_bbox_from_gee(row, gaul_dataset, gadm_dataset):
         else:
             # if target_feature is an ee.Feature (from GAUL)
             geom = target_feature.geometry()
-            # bounds: [[minx, miny], [maxx, miny], [maxx, maxy], [minx, maxy], [minx, miny]]
+            # bounds:[[minx, miny],[maxx, miny],[maxx, maxy],[minx, maxy],[minx, miny]]
             bounds = geom.bounds().coordinates().get(0).getInfo()
 
             return {"bbox": bounds[0:4], "match_method": match_method}
@@ -386,11 +386,11 @@ def get_bbox_from_gee(row, gaul_dataset, gadm_dataset):
 # Main function
 def main():
     # Filepath settings & Google Earth Engine project name setting
-    input_filepath = "/home/chunen/nas/HAZAMA_data/public_emdat_custom_request_2026-01-28.csv"
+    input_filepath = "/home/chunen/nas/HAZAMA_data/public_emdat_custom_request_2026-01-28.csv" # noqa: E501
     # output_filepath = "/home/chunen/HAZAMA/HAZAMA/outputs/data_ingestion.csv"
     my_gee_project = "oceanic-hash-467505-r2"
     # GADM GeoPackage filepath setting
-    gadm_filepath = "/home/chunen/nas/HAZAMA_data/gadm_410-levels-ADM2.gpkg"
+    gadm_filepath = "/home/chunen/nas/HAZAMA_data/gadm_410-levels-ADM2.gpkg" # noqa: E501
 
     # A-1. Initialize GEE and read GAUL dataset
     initialize_gee(my_gee_project)
@@ -442,6 +442,8 @@ def main():
     ]
     # output_clear.to_csv(output_filepath, index=False)
     print("The Data for ingestion was modified to output_clear variable.")
+    print("The preview of output_clear is as follows:")
+    print(output_clear)
 
 
 # ----------------------------------------------
