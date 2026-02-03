@@ -15,6 +15,7 @@ Requires-Dist: earthengine-api>=0.1.350
 Requires-Dist: pandas>=2.0.0
 Requires-Dist: geopandas>=0.14.0
 Requires-Dist: python-dotenv
+Requires-Dist: geemap
 Provides-Extra: dev
 Requires-Dist: uv; extra == "dev"
 Requires-Dist: ruff>=0.1.0; extra == "dev"
