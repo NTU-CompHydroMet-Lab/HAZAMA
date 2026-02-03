@@ -387,7 +387,7 @@ def get_bbox_from_gee(row, gaul_dataset, gadm_dataset):
 def main():
     # Filepath settings & Google Earth Engine project name setting
     input_filepath = "/home/chunen/nas/HAZAMA_data/public_emdat_custom_request_2026-01-28.csv"
-    output_filepath = "/home/chunen/HAZAMA/HAZAMA/outputs/data_ingestion.csv"
+    # output_filepath = "/home/chunen/HAZAMA/HAZAMA/outputs/data_ingestion.csv"
     my_gee_project = "oceanic-hash-467505-r2"
     # GADM GeoPackage filepath setting
     gadm_filepath = "/home/chunen/nas/HAZAMA_data/gadm_410-levels-ADM2.gpkg"
@@ -440,8 +440,8 @@ def main():
     output_clear = output[
         output["bbox"].apply(lambda x: x != [[0, 0], [0, 0], [0, 0], [0, 0]])
     ]
-    output_clear.to_csv(output_filepath, index=False)
-    print(f"The Data for ingestion is saved to {output_filepath}")
+    # output_clear.to_csv(output_filepath, index=False)
+    print("The Data for ingestion was modified to output_clear variable.")
 
 
 # ----------------------------------------------
