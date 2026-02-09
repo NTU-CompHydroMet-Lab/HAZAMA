@@ -53,7 +53,6 @@ def download_raw_vsis3(item, event_id, raw_dir, band, bbox_wgs84, logger):
     if os.path.exists(raw_path) and os.path.getsize(raw_path) > 0:
         return os.path.abspath(raw_path)
 
-    
     try:
         tmp_path = raw_path + ".part"
         logger.info(f"Downloading {band} from CDSE S3...")
@@ -161,82 +160,74 @@ def save_as_cog(item, bbox_wgs84, event_id, output_dir, band, raw_dir, logger):
 
 
 def process_event_for_cdse(
-    event_id, bbox, date_range, collection, bands, base_output_dir
+    event_id, bbox, date_range, collection, bands, base_output_dir, logger
 ):
     event_folder = os.path.join(base_output_dir, event_id)
-    for folder in [event_folder]:
-        if not os.path.exists(folder):
-            os.makedirs(folder)
-
     actual_bbox = bbox if bbox else DEFAULT_BBOX
+    raw_dir = os.path.join(event_folder, "raw")
+    os.makedirs(raw_dir, exist_ok=True)
 
-    results = {
-        "event_id": event_id,
-        "metadata": [],
-        "cloud_coverage": [],
-        "path": os.path.abspath(event_folder),
-        "status": "PENDING",
-    }
+    rows = []
 
     try:
         catalog = get_stac_client()
         search = catalog.search(
             collections=[collection], bbox=actual_bbox, datetime=date_range
         )
-
         items = list(search.items())
 
         if not items:
-            logger.warning(
-                f"[NO_DATA_FOUND] {event_id} in {date_range} does not have data."
-            )
-            results["status"] = "NO_IMAGE"
-            return results
-
-        success_count = 0
-
-        raw_dir = os.path.join(event_folder, "raw")
-        os.makedirs(raw_dir, exist_ok=True)
+            logger.warning(f"[NO_DATA_FOUND] {event_id}")
+            return []
 
         for item in items:
-            metadata_path = os.path.join(event_folder, "metadata", f"{item.id}.json")
-            os.makedirs(os.path.dirname(metadata_path), exist_ok=True)
+            metadata_dir = os.path.join(event_folder, "metadata")
+            os.makedirs(metadata_dir, exist_ok=True)
+            metadata_path = os.path.abspath(
+                os.path.join(metadata_dir, f"{item.id}.json")
+            )
             with open(metadata_path, "w", encoding="utf-8") as f:
                 json.dump(item.to_dict(), f, indent=4, ensure_ascii=False)
 
-            download_success = False
             for band in bands:
-                path = save_as_cog(
-                    item, actual_bbox, event_id, event_folder, band, raw_dir, logger
+                raw_path = download_raw_vsis3(
+                    item, event_id, raw_dir, band, actual_bbox, logger
                 )
-                if path:
-                    download_success = True
 
-            if download_success:
-                success_count += 1
-                results["metadata"].append(metadata_path)
-                cc = item.properties.get("eo:cloud_cover")
-                if cc is not None:
-                    results["cloud_coverage"].append(cc)
+                if raw_path:
+                    time_str = item.datetime.strftime("%Y%m%d")
+                    out_name = f"{event_id}_{time_str}_{band}_{item.id}_cropped.tif"
+                    cropped_dir = os.path.join(event_folder, "cropped")
+                    os.makedirs(cropped_dir, exist_ok=True)
+                    out_path = os.path.join(cropped_dir, out_name)
+                    final_path = cut_bbox_from_raw(
+                        raw_path, actual_bbox, out_path, logger
+                    )
 
-        if success_count > 0:
-            results["status"] = "SUCCESS"
-            results["metadata"] = ", ".join(results["metadata"])
-            results["cloud_coverage"] = (
-                round(
-                    sum(results["cloud_coverage"]) / len(results["cloud_coverage"]), 2
-                )
-                if results["cloud_coverage"]
-                else 0
-            )
-        else:
-            results["status"] = "NO_IMAGE"
+                    if final_path:
+                        rows.append(
+                            {
+                                "event_id": event_id,
+                                "item_id": item.id,
+                                "date": item.datetime.strftime("%Y-%m-%d"),
+                                "band": band,
+                                "cloud_cover": item.properties.get("eo:cloud_cover"),
+                                "metadata_path": metadata_path,
+                                "raw_path": os.path.abspath(raw_path),
+                                "cropped_path": os.path.abspath(final_path),
+                                "status": "SUCCESS",
+                            }
+                        )
+                    else:
+                        logger.error(f"Fail to crop: {item.id} {band}")
+                else:
+                    logger.error(f"Fail to download raw: {item.id} {band}")
+
+        return rows
 
     except Exception as e:
-        logger.error(f"Processing {event_id} error: {e}")
-        results["status"] = "API_ERROR"
-
-    return results
+        logger.error(f"Error processing event {event_id}: {e}")
+        return []
 
 
 def main(
@@ -264,18 +255,26 @@ def main(
                 f"{full_start.strftime('%Y-%m-%d')}/{full_end.strftime('%Y-%m-%d')}"
             )
 
-            res = process_event_for_cdse(
-                event["id"], event.get("bbox"), date_range, collection, bands, base_dir
+            event_results = process_event_for_cdse(
+                event["id"],
+                event.get("bbox"),
+                date_range,
+                collection,
+                bands,
+                base_dir,
+                logger,
             )
 
-            # 合併輸出
-            all_results.append(
-                {
-                    **res,
-                    "pre-event days": event["pre_event_days"],
-                    "post-event days": event["post_event_days"],
-                }
-            )
+            if event_results:
+                for row in event_results:
+                    row.update(
+                        {
+                            "pre_event_days": event["pre_event_days"],
+                            "post_event_days": event["post_event_days"],
+                        }
+                    )
+                all_results.extend(event_results)
+
     output_path = "data/results.csv"
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     df = pd.DataFrame(all_results)
@@ -287,11 +286,11 @@ if __name__ == "__main__":
     # Example usage
     test_events = [
         {
-            "id": "ISTANBUL_TEST",
+            "id": "ISTANBUL_TEST2",
             "start_date": "2024-12-05",  # 這是你之前測試過有圖的日期
             "end_date": "2024-12-10",
-            "pre_event_days": 3,
-            "post_event_days": 3,
+            "pre_event_days": 1,
+            "post_event_days": 1,
             "bbox": [28.97, 41.0, 28.99, 41.02],  # 伊斯坦堡座標
         }
     ]
