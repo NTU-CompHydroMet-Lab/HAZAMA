@@ -5,7 +5,8 @@ import os
 from datetime import datetime, timedelta
 
 import boto3
-import pandas as pd
+
+# import pandas as pd
 import rasterio
 from dotenv import load_dotenv
 from pystac_client import Client
@@ -275,10 +276,10 @@ def main(
                     )
                 all_results.extend(event_results)
 
-    output_path = "data/results.csv"
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    df = pd.DataFrame(all_results)
-    df.to_csv(output_path, index=False)
+    # output_path = "data/results.csv"
+    # os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    # df = pd.DataFrame(all_results)
+    # df.to_csv(output_path, index=False)
     logger.info("CSV had been updated！")
 
 
