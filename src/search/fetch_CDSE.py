@@ -243,18 +243,20 @@ if __name__ == "__main__":
     # Example usage
     test_events = [
         {
-            "id": "S2_TEST",
-            "start_date": "2024-12-05",
+            "id": "ISTANBUL_TEST",
+            "start_date": "2024-12-05", # 這是你之前測試過有圖的日期
             "end_date": "2024-12-10",
             "pre_event_days": 3,
             "post_event_days": 3,
-            "bbox": [121.56, 25.03, 121.57, 25.04],
+            "bbox": [28.97, 41.0, 28.99, 41.02], # 伊斯坦堡座標
         }
-    ]  
+    ]
+
     config = {
-        "collection": "sentinel-2-l2a",  # 可以自行調整CDSE產品
-        "bands": ["B04_10m", "TCI_10m"],  # 可自行調整波段
-        "base_dir": "data/radar_test",
+        "collection": "sentinel-2-l2a",
+        # 加入 B08 (近紅外) 來測試多波段，或者維持你習慣的波段
+        "bands": ["B04_10m", "TCI_10m"], 
+        "base_dir": "data/istanbul_test", # 換一個資料夾區隔
     }
 
     main(test_events, **config)
