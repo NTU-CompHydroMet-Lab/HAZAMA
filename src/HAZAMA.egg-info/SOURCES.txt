@@ -7,6 +7,5 @@ src/HAZAMA.egg-info/requires.txt
 src/HAZAMA.egg-info/top_level.txt
 src/search/fetch_CDSE.py
 src/search/fetch_GEE.py
-tests/test_cdse_integration.py
-tests/test_cdse_logic.py
+tests/test_cdse_final.py
 tests/test_test.py

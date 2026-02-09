@@ -65,7 +65,7 @@ def test_sentinel_1_multi_band_call(mock_save, mock_stac, mock_events):
     mock_item = MagicMock()
     mock_item.id = "S1_IMAGE_001"
     mock_item.properties = {"eo:cloud_cover": 0}
-        
+
     # --- 關鍵修正：模擬 to_dict() 回傳一個真正的字典 ---
     mock_item.to_dict.return_value = {
         "id": "S1_IMAGE_001",
@@ -73,14 +73,14 @@ def test_sentinel_1_multi_band_call(mock_save, mock_stac, mock_events):
         "properties": {"eo:cloud_cover": 0},
         "assets": {
             "vv": {"href": "s3://path/vv.tif"},
-            "vh": {"href": "s3://path/vh.tif"}
-        }
+            "vh": {"href": "s3://path/vh.tif"},
+        },
     }
     # ----------------------------------------------
 
     mock_stac.return_value.search.return_value.items.return_value = [mock_item]
     mock_save.return_value = "/mock/path/file.tif"
-    
+
     # 執行測試
     cdse(
         mock_events,
@@ -88,7 +88,7 @@ def test_sentinel_1_multi_band_call(mock_save, mock_stac, mock_events):
         bands=["vv", "vh"],
         base_dir="./output_images/mock",
     )
-    
+
     # 驗證
     assert mock_save.call_count == 2
 
