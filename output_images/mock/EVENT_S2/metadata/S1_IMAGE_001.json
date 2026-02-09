@@ -1,0 +1,15 @@
+{
+    "id": "S1_IMAGE_001",
+    "type": "Feature",
+    "properties": {
+        "eo:cloud_cover": 0
+    },
+    "assets": {
+        "vv": {
+            "href": "s3://path/vv.tif"
+        },
+        "vh": {
+            "href": "s3://path/vh.tif"
+        }
+    }
+}

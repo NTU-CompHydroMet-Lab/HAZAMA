@@ -7,6 +7,8 @@ earthengine-api>=0.1.350
 pandas>=2.0.0
 geopandas>=0.14.0
 python-dotenv
+requests>=2.32.5
+boto3>=1.42.29
 geemap
 
 [dev]
