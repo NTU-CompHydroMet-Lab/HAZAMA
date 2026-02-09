@@ -8,6 +8,7 @@ data/*
 
 # API keys
 credentials.json
+demos/global-flood-mapping-931a2b50fa5f.json
 
 # Python and virtual environment
 __pycache__/
