@@ -61,7 +61,12 @@ class TestIngestion(unittest.TestCase):
 
         # Case 2: Valid GADM data (no GAUL)
         gadm_list = [
-            {"name_1": "Province X", "gid_1": "ID_X", "name_2": "District Y", "gid_2": "ID_Y"}  # noqa: E501
+            {
+                "name_1": "Province X",
+                "gid_1": "ID_X",
+                "name_2": "District Y",
+                "gid_2": "ID_Y"
+            }
         ]
         result = reorganize_admin_data(None, gadm_list)
         self.assertEqual(len(result), 1)
@@ -69,7 +74,8 @@ class TestIngestion(unittest.TestCase):
         self.assertEqual(result[0]['adm1_name_list_gadm'], ["Province X"])
 
         # Case 3: Both GAUL and GADM
-        # Current logic: If GAUL ADM2 exists, it takes precedence and ignores GADM ADM2 entries for row creation?  # noqa: E501
+        # Current logic: If GAUL ADM2 exists, it takes precedence and 
+        # ignores GADM ADM2 entries for row creation?
         # Code:
         # if adm2_entries: ... for entry in adm2_entries: ...
         # elif adm2_entries_gadm: ...
@@ -108,19 +114,28 @@ class TestIngestion(unittest.TestCase):
 
         # Setup Mock for GEE Feature
         mock_feature = MagicMock()
-        # Ensure geometry().bounds().coordinates().get(0).getInfo() returns a list of coordinates
+        # Ensure geometry().bounds().coordinates().get(0).getInfo() returns a list of 
+        # coordinates:
         # [[minx, miny], [maxx, miny], [maxx, maxy], [minx, maxy], [minx, miny]]
-        mock_bounds_list = [[100.0, 10.0], [101.0, 10.0], [101.0, 11.0], [100.0, 11.0], [100.0, 10.0]]
+        mock_bounds_list = [
+            [100.0, 10.0],
+            [101.0, 10.0],
+            [101.0, 11.0],
+            [100.0, 11.0],
+            [100.0, 10.0]
+        ]
         
         mock_geom = MagicMock()
-        mock_geom.bounds.return_value.coordinates.return_value.get.return_value.getInfo.return_value = mock_bounds_list
+        mock_coords = mock_geom.bounds.return_value.coordinates.return_value
+        mock_coords.get.return_value.getInfo.return_value = mock_bounds_list
         mock_feature.geometry.return_value = mock_geom
 
         # Setup Mock for GAUL Collection
         mock_gaul = MagicMock()
         
         # Mock GADM DataFrame
-        # For simple testing, we can use an empty GADM or one that doesn't match to force GEE lookup
+        # For simple testing, we can use an empty GADM or one that 
+        # doesn't match to force GEE lookup
         mock_gadm = gpd.GeoDataFrame(
             {"GID_2": [], "NAME_2": [], "COUNTRY": [], "NAME_1": [], "geometry": []},
             crs="EPSG:4326"
@@ -157,12 +172,14 @@ class TestIngestion(unittest.TestCase):
 
         # --- Test 2: Match by Coordinate Fallback ---
         # Force name/code lookups to fail
-        # This requires `filter(...).size().getInfo()` to return 0 for the first few calls
+        # This requires `filter(...).size().getInfo()` to return 0
         # and `filterBounds(...).size().getInfo()` to return 1.
         
-        # We can use side_effect for the different filter calls if they happen on the same object.
-        # However, `gaul_dataset.filter(...)` returns a NEW object (mock_filtered). 
-        # So we mock the `gaul_dataset.filter` to return a "empty" collection mock first.
+        # We can use side_effect for the different filter calls 
+        # if they happen on the same object.
+        # However, `gaul_dataset.filter(...)` returns a NEW object (mock_filtered).
+        # So we mock the `gaul_dataset.filter` 
+        # to return a "empty" collection mock first.
         
         mock_empty_collection = MagicMock()
         mock_empty_collection.size.return_value.getInfo.return_value = 0
@@ -187,7 +204,8 @@ class TestIngestion(unittest.TestCase):
 
         # --- Test 3: Match GADM (local GeoDataFrame) ---
         # We need to populate the GADM dataframe with a match
-        # Let's match by ADM2_CODE_GADM (which is cast to int in code, so must be numeric string)
+        # Let's match by ADM2_CODE_GADM (which is cast to int in code
+        # , so must be numeric string)
         # row["adm2_code_gadm"] is "ID_123". int("ID_123") raises ValueError. 
         # So it skips ADM2_CODE_GADM check in catch block.
         
@@ -208,7 +226,10 @@ class TestIngestion(unittest.TestCase):
         
         result_gadm = get_bbox_from_gee(row, mock_gaul, gadm_match)
         self.assertEqual(result_gadm['match_method'], "ADM0&1&2_NAME_GADM")
-        self.assertEqual(result_gadm['bbox'], [[10.0, 10.0], [20.0, 10.0], [20.0, 20.0], [10.0, 20.0]])
+        self.assertEqual(
+            result_gadm['bbox'],
+            [[10.0, 10.0], [20.0, 10.0], [20.0, 20.0], [10.0, 20.0]]
+        )
 
 
 if __name__ == '__main__':
