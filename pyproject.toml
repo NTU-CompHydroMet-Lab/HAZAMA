@@ -22,7 +22,8 @@ dependencies = [
     "pandas>=2.0.0",
     "geopandas>=0.14.0",
     "python-dotenv", # API Keys
-    "geemap",
+    "geemap>=0.36.6",
+    "tqdm>=4.67.1",
 ]
 
 [project.optional-dependencies]
